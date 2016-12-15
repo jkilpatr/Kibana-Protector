@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, send_from_directory, stream_with_context, Response
+from flask import Flask, render_template, request, send_from_directory
 from flask_login import LoginManager, login_user, current_user
 import requests
 import tools
@@ -26,8 +26,9 @@ def kibana_get(path, subdir):
 
     if auth:
         print "User is authed, proxying to kibana for " + path
-        req = requests.get(kibana_url + subdir + "/" + path, stream = True)
-        return Response(stream_with_context(req.iter_content()), content_type = req.headers['content-type'])
+        response = requests.get(kibana_url + subdir + "/" + path, stream = True)
+        print response
+        return tools.send_to_user(response)
     else:
         return render_template('capcha.html')
 
@@ -40,13 +41,31 @@ def kibana_post(path, subdir):
         print "User is doing bad things"
         return render_template('sorry.html')
     elif auth:
-        proxy_request_response = \
+        response = \
             tools.parse_proxy_request(request, \
                                       kibana_url + subdir + "/"+ path \
                                       ,"post"
                                       ,True)
-        print proxy_request_response
-        return Response(stream_with_context(proxy_request_response.iter_content()), content_type = proxy_request_response.headers['content-type'])
+        print response
+        return tools.send_to_user(response)
+    else:
+        return render_template('capcha.html')
+
+@application.route("/<subdir>/<path:path>", methods=["PUT"])
+def kibana_put(path, subdir):
+    print "someone is trying to talk to elasticsearch " + path + " <"
+    auth = current_user.is_authenticated
+    if auth and not tools.allowed(path):
+        print "User is doing bad things"
+        return render_template('sorry.html')
+    elif auth:
+        response = \
+            tools.parse_proxy_request(request, \
+                                      kibana_url + subdir + "/"+ path \
+                                      ,"put"
+                                      ,True)
+        print response
+        return tools.send_to_user(response)
     else:
         return render_template('capcha.html')
 
@@ -58,13 +77,29 @@ def kibana_delete(path, subdir):
         print "User is doing bad things"
         return render_template('sorry.html')
     elif auth:
-        proxy_request_response = \
+        response = \
             tools.parse_proxy_request(request, \
                                       kibana_url + subdir + "/"+ path \
                                       ,"delete"
                                       ,True)
-        print proxy_request_response
-        return Response(stream_with_context(proxy_request_response.iter_content()), content_type = proxy_request_response.headers['content-type'])
+        print response
+        return tools.send_to_user(response)
+    else:
+        return render_template('capcha.html')
+
+
+@application.route("/shorten", methods=["POST"])
+def kibana_shorten():
+    print "someone is trying to shorten a link"
+    auth = current_user.is_authenticated
+    if auth:
+        response = \
+            tools.parse_proxy_request(request, \
+                                      kibana_url + "shorten" \
+                                      ,"post"
+                                      ,True)
+        print response
+        return tools.send_to_user(response)
     else:
         return render_template('capcha.html')
 
@@ -72,8 +107,8 @@ def kibana_delete(path, subdir):
 def default():
     print "you have reached the root directory, how can I help you?"
     if current_user.is_authenticated:
-        req = requests.get(kibana_url, stream = True)
-        return Response(stream_with_context(req.iter_content()), content_type = req.headers['content-type'])
+        response = requests.get(kibana_url, stream = True)
+        return tools.send_to_user(response)
     else:
         return render_template('capcha.html')
 
