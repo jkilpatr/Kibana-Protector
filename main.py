@@ -8,6 +8,7 @@ import uuid
 application = Flask(__name__, static_url_path='')
 application.secret_key = ''
 kibana_url = ""
+grafana_url = ""
 domain = ""
 login_manager = LoginManager()
 login_manager.init_app(application)
@@ -18,7 +19,6 @@ def load_user(user_id):
     return person
 
 
-
 @application.route('/<subdir>/<path:path>')
 def kibana_get(path, subdir):
     #this way we check the db only once
@@ -26,19 +26,24 @@ def kibana_get(path, subdir):
 
     if auth:
         print "User is authed, proxying to kibana for " + path
-        response = requests.get(kibana_url + subdir + "/" + path, stream = True)
-        print response
+        response = \
+            tools.parse_proxy_request(request, \
+                                      kibana_url + subdir + "/" + path, \
+                                      "get", \
+                                      True)
+        print "Response from Elastic to GET " + str(response)
         return tools.send_to_user(response)
     else:
-        return render_template('capcha.html')
+        return render_template('sorry.html')
 
 
 @application.route("/<subdir>/<path:path>", methods=["POST"])
 def kibana_post(path, subdir):
     print "someone is trying to talk to elasticsearch " + path + " <"
     auth = current_user.is_authenticated
-    if auth and not tools.allowed(path):
-        print "User is doing bad things"
+    if auth and not tools.allowed(path, request):
+        print "data for disallowed post"
+        print request.data
         return render_template('sorry.html')
     elif auth:
         response = \
@@ -46,17 +51,19 @@ def kibana_post(path, subdir):
                                       kibana_url + subdir + "/"+ path \
                                       ,"post"
                                       ,True)
-        print response
+        print "Response from Elastic to POST " + str(response)
         return tools.send_to_user(response)
     else:
+        print "user is not authed"
         return render_template('capcha.html')
 
 @application.route("/<subdir>/<path:path>", methods=["PUT"])
 def kibana_put(path, subdir):
     print "someone is trying to talk to elasticsearch " + path + " <"
     auth = current_user.is_authenticated
-    if auth and not tools.allowed(path):
-        print "User is doing bad things"
+    if auth and not tools.allowed(path, request):
+        print "data for disallowed put"
+        print requests.data
         return render_template('sorry.html')
     elif auth:
         response = \
@@ -64,17 +71,18 @@ def kibana_put(path, subdir):
                                       kibana_url + subdir + "/"+ path \
                                       ,"put"
                                       ,True)
-        print response
+        print "Response from Elastic to PUT " + str(response)
         return tools.send_to_user(response)
     else:
-        return render_template('capcha.html')
+        return render_template('sorry.html', grafana_url=grafana_url)
 
 @application.route("/<subdir>/<path:path>", methods=["DELETE"])
 def kibana_delete(path, subdir):
     print "someone is trying to talk to elasticsearch " + path + " <"
     auth = current_user.is_authenticated
-    if auth and not tools.allowed(path):
-        print "User is doing bad things"
+    if auth and not tools.allowed(path, request):
+        print "data for disallowed delete"
+        print request.data
         return render_template('sorry.html')
     elif auth:
         response = \
@@ -82,10 +90,10 @@ def kibana_delete(path, subdir):
                                       kibana_url + subdir + "/"+ path \
                                       ,"delete"
                                       ,True)
-        print response
+        print "Response from Elastic to DELETE " + str(response)
         return tools.send_to_user(response)
     else:
-        return render_template('capcha.html')
+        return render_template('sorry.html', grafana_url=grafana_url)
 
 
 @application.route("/shorten", methods=["POST"])
@@ -97,11 +105,27 @@ def kibana_shorten():
             tools.parse_proxy_request(request, \
                                       kibana_url + "shorten" \
                                       ,"post"
-                                      ,True)
-        print response
+                                      ,False)
+        print "Response from Elastic" + str(response)
         return tools.send_to_user(response)
     else:
-        return render_template('capcha.html')
+        return render_template('capcha.html', grafana_url=grafana_url)
+
+@application.route("/goto/<short>")
+def kibana_unshorten(short):
+    auth = current_user.is_authenticated
+
+    if auth:
+        print "short request to proxy " + str(request.headers)
+        response = \
+            tools.parse_proxy_request(request, \
+                                      kibana_url + "goto/" + short, \
+                                      "get", \
+                                      True)
+        print "Response from Elastic to short GET " + str(response.headers)
+        return tools.send_to_user(response)
+    else:
+        return render_template('sorry.html')
 
 @application.route('/')
 def default():
@@ -110,7 +134,7 @@ def default():
         response = requests.get(kibana_url, stream = True)
         return tools.send_to_user(response)
     else:
-        return render_template('capcha.html')
+        return render_template('capcha.html', grafana_url=grafana_url)
 
 @application.route("/submit", methods=["POST"])
 def submit():
@@ -123,7 +147,7 @@ def submit():
         pass
     else:
         # FAILED
-        return render_template('capcha.html')
+        return render_template('sorry.html', grafana_url=grafana_url)
         pass
 
 
